@@ -1,5 +1,5 @@
 .venv
-.env*
+.env
 advanced-docs
 __pycache__
 *.pyc

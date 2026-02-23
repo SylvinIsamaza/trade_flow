@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tradeflow_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 3000s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tradeflow_network
+
+networks:
+  tradeflow_network:
+    driver: bridge
