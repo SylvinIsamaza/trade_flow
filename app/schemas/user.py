@@ -29,6 +29,7 @@ class UserResponse(UserBase):
     id: str
     role: str
     created_at: datetime
+    is_active: bool = True
     location: Optional[str] = None
     timezone: Optional[str] = None
     bio: Optional[str] = None

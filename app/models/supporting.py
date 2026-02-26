@@ -1,7 +1,7 @@
 """
 Supporting tables for comments, files, notifications, jobs, strategies, notes, tags, etc.
 """
-from datetime import date, time
+from datetime import date, time, datetime
 from typing import Optional, List
 from sqlalchemy import (
     String, Text, Integer, Numeric, Date, DateTime, Time,
@@ -31,7 +31,7 @@ class Comment(Base, TimestampMixin):
     """Raw comments on trades/days."""
     __tablename__ = "comments"
     
-    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    id: Mapped[str] = mapped_column(String(30), primary_key=True, default=lambda: generate_comment_id(""))
     account_id: Mapped[str] = mapped_column(String(30), ForeignKey("accounts.id"), nullable=False, index=True)
     trade_id: Mapped[Optional[str]] = mapped_column(String(35), ForeignKey("trades.id"), nullable=True)
     user_id: Mapped[str] = mapped_column(String(20), ForeignKey("users.id"), nullable=False, index=True)
@@ -89,7 +89,7 @@ class NotificationType(enum.Enum):
 
 
 class Notification(Base, TimestampMixin):
-    """User notifications."""
+    """User notifications (account-level)."""
     __tablename__ = "notifications"
     
     id: Mapped[str] = mapped_column(String(30), primary_key=True)
@@ -97,6 +97,31 @@ class Notification(Base, TimestampMixin):
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+# ============================================
+# User Notifications (Support/Alert Notifications)
+# ============================================
+
+class UserNotificationType(enum.Enum):
+    SECURITY = "SECURITY"
+    BACKUP_CODES = "BACKUP_CODES"
+    ACCOUNT = "ACCOUNT"
+    SYSTEM = "SYSTEM"
+
+
+class UserNotification(Base, TimestampMixin):
+    """User-level notifications for security alerts, support messages, etc."""
+    __tablename__ = "user_notifications"
+    
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(20), ForeignKey("users.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False, default=UserNotificationType.SYSTEM.value)
+    meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Additional data like {remaining_codes: 5}
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 # ============================================

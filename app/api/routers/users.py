@@ -64,3 +64,18 @@ async def get_user_by_id(
         )
     
     return user
+
+
+@router.delete("/me", status_code=status.HTTP_200_OK)
+async def deactivate_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Deactivate current user account (soft delete)."""
+    # Soft delete - just mark the user as inactive
+    # In production, you might want to actually delete or mark as deleted
+    current_user.is_active = False
+    
+    await db.commit()
+    
+    return {"success": True, "message": "Account deactivated successfully"}

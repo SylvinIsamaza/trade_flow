@@ -4,8 +4,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta, datetime
-from typing import Optional
+from typing import Optional, List
 import secrets
+import pyotp
+
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -17,7 +19,10 @@ from app.core.security import (
     decode_token,
 )
 from app.models.user import User
+from app.models.supporting import UserNotification
 from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, PasswordResetRequest, TwoFactorSetup, TwoFactorVerify
+from app.utils.id_generator import generate_user_notification_id
+
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -82,6 +87,13 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Check if account is active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is deactivated"
+        )
+    
     # Check if account is locked
     if user.lock_until and user.lock_until > datetime.utcnow():
         raise HTTPException(
@@ -101,11 +113,35 @@ async def login(
     
     # Verify 2FA if enabled
     if user.is_two_factor_enabled and two_factor_code:
-        import pyotp
         totp = pyotp.TOTP(user.two_factor_secret or "")
-        is_valid = totp.verify(two_factor_code) or (
-            two_factor_code in (user.two_factor_backup_codes or [])
-        )
+        is_valid = totp.verify(two_factor_code)
+        
+        # Check if it's a backup code
+        backup_codes = user.two_factor_backup_codes or []
+        is_backup_code = two_factor_code.upper() in [code.upper() for code in backup_codes]
+        
+        if is_backup_code:
+            is_valid = True
+            # Remove the used backup code
+            backup_codes = [code for code in backup_codes if code.upper() != two_factor_code.upper()]
+            user.two_factor_backup_codes = backup_codes
+            await db.commit()
+            
+            # Check remaining backup codes and create notification if low
+            remaining_codes = len(backup_codes)
+            if remaining_codes <= 2:
+                # Create notification for low backup codes
+                notification = UserNotification(
+                    id=generate_user_notification_id(),
+                    user_id=user.id,
+                    title="Backup Codes Running Low",
+                    description=f"You only have {remaining_codes} backup code(s) remaining. Please generate new backup codes to avoid being locked out of your account.",
+                    type="BACKUP_CODES",
+                    meta={"remaining_codes": remaining_codes, "action": "generate_new_codes"}
+                )
+                db.add(notification)
+                await db.commit()
+        
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -279,12 +315,20 @@ async def reset_password(reset_data: PasswordResetRequest, db: AsyncSession = De
 # ===== Change Password =====
 @router.post("/change-password")
 async def change_password(
-    current_password: str,
-    new_password: str,
+    password_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Change password while logged in."""
+    current_password = password_data.get("current_password")
+    new_password = password_data.get("new_password")
+    
+    if not current_password or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password and new password are required"
+        )
+    
     if not verify_password(current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -309,7 +353,6 @@ async def change_password(
 @router.post("/2fa/setup", response_model=TwoFactorSetup)
 async def setup_2fa(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Setup 2FA - generate secret."""
-    import pyotp
     
     # Generate secret
     secret = pyotp.random_base32()
@@ -318,7 +361,7 @@ async def setup_2fa(current_user: User = Depends(get_current_user), db: AsyncSes
     totp = pyotp.TOTP(secret)
     qr_url = totp.provisioning_uri(
         name=current_user.email,
-        issuer_name="TradeZella"
+        issuer_name="TradeFlow"
     )
     
     # Store temporary secret (not enabled yet)
@@ -359,9 +402,9 @@ async def enable_2fa(
             detail="Invalid verification code"
         )
     
-    # Enable 2FA
+    # Enable 2FA - keep the secret for future verification
     current_user.is_two_factor_enabled = True
-    current_user.two_factor_secret = None  # Clear temp secret
+    # Keep two_factor_secret for login verification
     
     await db.commit()
     
@@ -374,11 +417,17 @@ async def enable_2fa(
 
 @router.post("/2fa/disable", response_model=dict)
 async def disable_2fa(
-    password: str,
+    request_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Disable 2FA."""
+    password = request_data.get("password")
+    if not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required"
+        )
     if not verify_password(password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -436,3 +485,82 @@ async def verify_2fa(
 async def logout():
     """Logout endpoint."""
     return {"success": True, "message": "Logged out successfully"}
+
+
+# ===== User Notifications =====
+@router.get("/notifications", response_model=List[dict])
+async def get_user_notifications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all notifications for the current user."""
+    stmt = select(UserNotification).where(
+        UserNotification.user_id == current_user.id
+    ).order_by(UserNotification.created_at.desc()).limit(50)
+    
+    result = await db.execute(stmt)
+    notifications = result.scalars().all()
+    
+    return [
+        {
+            "id": n.id,
+            "title": n.title,
+            "description": n.description,
+            "type": n.type,
+            "meta": n.meta,
+            "is_read": n.is_read,
+            "read_at": n.read_at.isoformat() if n.read_at else None,
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        }
+        for n in notifications
+    ]
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a notification as read."""
+    stmt = select(UserNotification).where(
+        UserNotification.id == notification_id,
+        UserNotification.user_id == current_user.id
+    )
+    
+    result = await db.execute(stmt)
+    notification = result.scalar_one_or_none()
+    
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found"
+        )
+    
+    notification.is_read = True
+    notification.read_at = datetime.utcnow()
+    await db.commit()
+    
+    return {"success": True}
+
+
+@router.post("/notifications/read-all")
+async def mark_all_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark all notifications as read."""
+    from sqlalchemy import update
+    
+    stmt = update(UserNotification).where(
+        UserNotification.user_id == current_user.id,
+        UserNotification.is_read == False
+    ).values(
+        is_read=True,
+        read_at=datetime.utcnow()
+    )
+    
+    await db.execute(stmt)
+    await db.commit()
+    
+    return {"success": True}

@@ -88,3 +88,8 @@ def generate_folder_id(account_id: str) -> str:
 def generate_job_id() -> str:
     """Generate background job ID: job_<uuid8>"""
     return f"job_{uuid.uuid4().hex[:8]}"
+
+
+def generate_user_notification_id() -> str:
+    """Generate user notification ID: usr_ntf_<uuid8>"""
+    return f"usr_ntf_{uuid.uuid4().hex[:8]}"

@@ -21,6 +21,7 @@ class User(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(String(10), default=UserRole.USER.value, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Profile fields
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

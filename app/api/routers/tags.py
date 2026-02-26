@@ -42,17 +42,19 @@ class TagResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/", response_model=List[TagResponse])
+@router.get("/", response_model=dict)
 async def get_tags(
     account_id: Optional[str] = None,
     tag_type: Optional[str] = Query(None, alias="type"),
     strategy_id: Optional[str] = None,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get tags with optional filters."""
+    """Get tags with optional filters and pagination."""
+    from sqlalchemy import func
+    
     # Build base query - only tags from user's accounts
     query = select(Tag).join(Account, Tag.account_id == Account.id)
     query = query.where(Account.user_id == current_user.id)
@@ -65,13 +67,27 @@ async def get_tags(
     if strategy_id:
         query = query.where(Tag.strategy_id == strategy_id)
     
-    # Order by name
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Order and paginate
     query = query.order_by(Tag.name).offset(offset).limit(limit)
     
     result = await db.execute(query)
     tags = result.scalars().all()
     
-    return tags
+    # Convert to Pydantic models
+    tag_responses = [TagResponse.model_validate(t) for t in tags]
+    
+    return {
+        "items": [t.model_dump() for t in tag_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=TagResponse, status_code=status.HTTP_201_CREATED)

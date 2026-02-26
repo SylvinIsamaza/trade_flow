@@ -5,7 +5,7 @@ from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Time, Numeri
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
-from app.utils.id_generator import generate_account_id
+from app.utils.id_generator import generate_account_id, generate_trade_id
 
 
 class AccountType(enum.Enum):
@@ -54,7 +54,7 @@ class Trade(Base, TimestampMixin):
         Index("ix_trades_account_executed_at", "account_id", "executed_at"),
     )
     
-    id: Mapped[str] = mapped_column(String(35), primary_key=True)
+    id: Mapped[str] = mapped_column(String(35), primary_key=True, default=lambda: generate_trade_id(""))
     account_id: Mapped[str] = mapped_column(String(30), ForeignKey("accounts.id"), nullable=False, index=True)
     
     # Trade details

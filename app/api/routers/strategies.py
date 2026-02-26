@@ -50,15 +50,17 @@ class StrategyResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/", response_model=List[StrategyResponse])
+@router.get("/", response_model=dict)
 async def get_strategies(
     account_id: Optional[str] = None,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get strategies with optional filters."""
+    """Get strategies with optional filters and pagination."""
+    from sqlalchemy import func
+    
     # Build base query
     query = select(Strategy).join(Account, Strategy.account_id == Account.id)
     query = query.where(Account.user_id == current_user.id)
@@ -67,13 +69,27 @@ async def get_strategies(
     if account_id:
         query = query.where(Strategy.account_id == account_id)
     
-    # Order by name
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Order and paginate
     query = query.order_by(Strategy.name).offset(offset).limit(limit)
     
     result = await db.execute(query)
     strategies = result.scalars().all()
     
-    return strategies
+    # Convert to Pydantic models
+    strategy_responses = [StrategyResponse.model_validate(s) for s in strategies]
+    
+    return {
+        "items": [s.model_dump() for s in strategy_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=StrategyResponse, status_code=status.HTTP_201_CREATED)

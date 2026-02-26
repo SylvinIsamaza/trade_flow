@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routers import (
-    auth, users, accounts, trades, analytics,
+    auth, users, accounts, trades, analytics, reports,
     comments, tags, strategies, notes, insights,
     notifications, sessions, import_trades
 )
@@ -40,6 +40,7 @@ app.include_router(insights.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(import_trades.router, prefix="/api")
+app.include_router(reports.router, prefix="/api")
 
 
 @app.get("/")

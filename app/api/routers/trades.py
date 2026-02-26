@@ -2,60 +2,78 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from app.core.database import get_db
 from app.api.routers.auth import get_current_user
 from app.models.user import User
 from app.models.account import Account, Trade
 from app.schemas.trade import TradeCreate, TradeUpdate, TradeResponse
+from app.utils.id_generator import generate_trade_id
 
 router = APIRouter(prefix="/trades", tags=["Trades"])
 
 
-@router.get("/", response_model=List[TradeResponse])
+@router.get("/", response_model=dict)
 async def get_trades(
     account_id: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     side: Optional[str] = None,
     status: Optional[str] = None,
     symbol: Optional[str] = None,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get trades with optional filters."""
-    # Build query
-    query = select(Trade)
+    """Get trades with optional filters and pagination."""
+    from sqlalchemy import func
     
-    # Join with Account to ensure user owns the account
-    query = query.join(Account, Trade.account_id == Account.id)
-    query = query.where(Account.user_id == current_user.id)
+    # Build base query for filtering
+    base_query = select(Trade).join(Account, Trade.account_id == Account.id)
+    base_query = base_query.where(Account.user_id == current_user.id)
     
     # Apply filters
     if account_id:
-        query = query.where(Trade.account_id == account_id)
+        base_query = base_query.where(Trade.account_id == account_id)
     if start_date:
-        query = query.where(Trade.executed_at >= start_date)
+        # Convert date to datetime for comparison (start of day)
+        start_datetime = datetime.combine(start_date, datetime.min.time())
+        base_query = base_query.where(Trade.executed_at >= start_datetime)
     if end_date:
-        query = query.where(Trade.executed_at <= end_date)
+        # Convert date to datetime for comparison (end of day)
+        end_datetime = datetime.combine(end_date, datetime.max.time())
+        base_query = base_query.where(Trade.executed_at <= end_datetime)
     if side:
-        query = query.where(Trade.side == side)
+        base_query = base_query.where(Trade.side == side)
     if status:
-        query = query.where(Trade.status == status)
+        base_query = base_query.where(Trade.status == status)
     if symbol:
-        query = query.where(Trade.symbol == symbol)
+        base_query = base_query.where(Trade.symbol == symbol)
+    
+    # Get total count
+    count_query = select(func.count()).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
     
     # Order and paginate
-    query = query.order_by(Trade.executed_at.desc())
+    query = base_query.order_by(Trade.executed_at.desc())
     query = query.offset(offset).limit(limit)
     
     result = await db.execute(query)
     trades = result.scalars().all()
     
-    return trades
+    # Convert to Pydantic models
+    trade_responses = [TradeResponse.model_validate(trade) for trade in trades]
+    
+    return {
+        "items": [tr.model_dump() for tr in trade_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=TradeResponse, status_code=status.HTTP_201_CREATED)
@@ -83,6 +101,7 @@ async def create_trade(
         )
     
     new_trade = Trade(
+        id=generate_trade_id(trade_data.account_id, trade_data.executed_at),
         account_id=trade_data.account_id,
         symbol=trade_data.symbol,
         side=trade_data.side,

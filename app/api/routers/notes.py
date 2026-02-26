@@ -143,7 +143,9 @@ async def delete_folder(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete folder."""
+    """Delete folder and all its notes."""
+    from sqlalchemy import delete as sql_delete
+    
     result = await db.execute(
         select(Folder)
         .join(Account, Folder.account_id == Account.id)
@@ -153,24 +155,36 @@ async def delete_folder(
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
     
-    await db.delete(folder)
+    # Delete all notes in the folder first using DELETE statement
+    await db.execute(
+        sql_delete(Note).where(Note.folder_id == folder_id)
+    )
+    
+    # Now delete the folder
+    await db.execute(
+        sql_delete(Folder).where(Folder.id == folder_id)
+    )
+    
     await db.commit()
 
 
 # ===== Note Endpoints =====
-@router.get("/", response_model=List[NoteResponse])
+@router.get("/", response_model=dict)
 async def get_notes(
     account_id: Optional[str] = None,
     folder_id: Optional[str] = None,
     tag: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get notes with filters."""
+    """Get notes with filters and pagination."""
+    from sqlalchemy import func
+    
+    # Build base query
     query = select(Note).join(Account, Note.account_id == Account.id)
     query = query.where(Account.user_id == current_user.id)
     
@@ -185,10 +199,27 @@ async def get_notes(
     if end_date:
         query = query.where(Note.date <= end_date)
     
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    # Paginate
     query = query.order_by(Note.date.desc()).offset(offset).limit(limit)
     
     result = await db.execute(query)
-    return result.scalars().all()
+    notes = result.scalars().all()
+    
+    # Convert to Pydantic models
+    note_responses = [NoteResponse.model_validate(note) for note in notes]
+    
+    return {
+        "items": [n.model_dump() for n in note_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)

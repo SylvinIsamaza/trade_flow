@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -12,17 +12,41 @@ from app.schemas.account import AccountCreate, AccountUpdate, AccountResponse
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
 
-@router.get("/", response_model=List[AccountResponse])
+@router.get("/", response_model=dict)
 async def get_accounts(
+    limit: int = Query(default=50, le=500),
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all accounts for current user."""
+    """Get all accounts for current user with pagination."""
+    from sqlalchemy import func
+    
+    # Get total count
+    count_query = select(func.count()).select_from(Account).where(Account.user_id == current_user.id)
+    count_result = await db.execute(count_query)
+    total = count_result.scalar() or 0
+    
+    # Get paginated accounts
     result = await db.execute(
-        select(Account).where(Account.user_id == current_user.id)
+        select(Account)
+        .where(Account.user_id == current_user.id)
+        .order_by(Account.created_at.desc())
+        .offset(offset)
+        .limit(limit)
     )
     accounts = result.scalars().all()
-    return accounts
+    
+    # Convert to Pydantic models
+    account_responses = [AccountResponse.model_validate(acc) for acc in accounts]
+    
+    return {
+        "items": [acc.model_dump() for acc in account_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=AccountResponse, status_code=status.HTTP_201_CREATED)

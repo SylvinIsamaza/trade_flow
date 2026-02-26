@@ -9,6 +9,7 @@ from app.api.routers.auth import get_current_user
 from app.models.user import User
 from app.models.account import Account
 from app.models.supporting import Comment
+from app.utils.id_generator import generate_comment_id
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
@@ -21,7 +22,7 @@ class CommentCreate(BaseModel):
     parent_id: Optional[int] = None
     content: str
     comment_type: Optional[str] = None  # "daily" or "weekly"
-    date: Optional[date] = None
+    date: Optional[str] = None  # Accept string and convert to date
 
 
 class CommentUpdate(BaseModel):
@@ -43,18 +44,20 @@ class CommentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/", response_model=List[CommentResponse])
+@router.get("/", response_model=dict)
 async def get_comments(
-    account_id: Optional[int] = None,
+    account_id: Optional[str] = None,
     trade_id: Optional[int] = None,
     comment_type: Optional[str] = None,
     date: Optional[date] = None,
-    limit: int = Query(default=100, le=1000),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get comments with optional filters."""
+    """Get comments with optional filters and pagination."""
+    from sqlalchemy import func
+    
     # Build base query - only comments from user's accounts
     query = select(Comment).join(Account, Comment.account_id == Account.id)
     query = query.where(Account.user_id == current_user.id)
@@ -69,6 +72,11 @@ async def get_comments(
     if date:
         query = query.where(Comment.date == date)
     
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
     # Order and paginate
     query = query.order_by(Comment.created_at.desc())
     query = query.offset(offset).limit(limit)
@@ -76,7 +84,16 @@ async def get_comments(
     result = await db.execute(query)
     comments = result.scalars().all()
     
-    return comments
+    # Convert to Pydantic models
+    comment_responses = [CommentResponse.model_validate(c) for c in comments]
+    
+    return {
+        "items": [c.model_dump() for c in comment_responses],
+        "total": total,
+        "page": (offset // limit) + 1,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
+    }
 
 
 @router.post("/", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
@@ -103,14 +120,29 @@ async def create_comment(
             detail="Account not found"
         )
     
+    # Convert date string to date object if provided
+    comment_date = None
+    if comment_data.date:
+        try:
+            if isinstance(comment_data.date, str):
+                comment_date = datetime.strptime(comment_data.date, "%Y-%m-%d").date()
+            else:
+                comment_date = comment_data.date
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date format. Use YYYY-MM-DD"
+            )
+    
     new_comment = Comment(
+        id=generate_comment_id(comment_data.account_id),
         account_id=comment_data.account_id,
         trade_id=comment_data.trade_id,
         user_id=current_user.id,
         parent_id=comment_data.parent_id,
         content=comment_data.content,
         comment_type=comment_data.comment_type,
-        date=comment_data.date,
+        date=comment_date,
     )
     
     db.add(new_comment)
