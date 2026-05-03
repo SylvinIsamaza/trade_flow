@@ -66,7 +66,7 @@ def calculate_streaks(trades: List[Any]) -> Dict[str, float]:
 
 def calculate_pnl_by_day_of_week(trades: List[Any]) -> Dict[str, Any]:
     """Calculate P&L grouped by day of week."""
-    days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    days = [ 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat','Sun']
     day_data = {day: 0.0 for day in days}
     day_trades = {day: 0 for day in days}
     
@@ -863,6 +863,9 @@ def calculate_day_win_rate(daily_stats: List[Dict[str, Any]]) -> float:
 class DashboardResponse(BaseModel):
     """Response model for dashboard data."""
     account_id: str
+    # Balance information
+    starting_balance: Optional[float] = None
+    current_balance: float
     # Summary stats
     net_pnl: float
     total_trades: int
@@ -1029,9 +1032,16 @@ async def get_dashboard(
         if sorted_by_created and sorted_by_created[0].created_at:
             last_import = sorted_by_created[0].created_at.isoformat()
     
+    # Calculate balance
+    starting_balance = float(account.starting_balance) if account.starting_balance else 0
+    total_pnl = float(stats.get("total_profit", 0))
+    current_balance = starting_balance + total_pnl
+    
     return DashboardResponse(
         account_id=account_id,
-        net_pnl=float(stats.get("total_profit", 0)),
+        starting_balance=starting_balance if starting_balance > 0 else None,
+        current_balance=current_balance,
+        net_pnl=total_pnl,
         total_trades=int(stats.get("total_trades", 0)),
         win_rate=float(stats.get("win_rate", 0)),
         profit_factor=float(stats.get("profit_factor", 0)),

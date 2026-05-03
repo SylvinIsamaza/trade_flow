@@ -52,6 +52,8 @@ class TradeCreate(TradeBase):
 
 class TradeUpdate(BaseModel):
     """Schema for updating trade information."""
+    model_config = ConfigDict(from_attributes=True)
+    
     symbol: Optional[str] = None
     side: Optional[str] = None
     entry_price: Optional[float] = None
@@ -74,9 +76,40 @@ class TradeUpdate(BaseModel):
     notes: Optional[str] = None
     executed_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
-    date: Optional[datetime] = None
+    date: Optional[Union[str, datetime]] = None
     time: Optional[str] = None
     close_time: Optional[str] = None
+    
+    @field_validator('date', 'executed_at', 'closed_at', mode='before')
+    @classmethod
+    def parse_datetime_fields(cls, value: Optional[Union[str, datetime]]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            # Try to parse as ISO format date/datetime
+            try:
+                return datetime.fromisoformat(value)
+            except (ValueError, TypeError):
+                pass
+            # Try parsing as date only (YYYY-MM-DD)
+            try:
+                return datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=None)
+            except (ValueError, TypeError):
+                pass
+        return None
+    
+    @field_validator('time', 'close_time', mode='before')
+    @classmethod
+    def convert_time_to_string(cls, value: Optional[Union[str, time]]) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, time):
+            return value.strftime('%H:%M')
+        return str(value) if value else None
 
 
 class TradeResponse(TradeBase):

@@ -189,19 +189,13 @@ async def update_strategy(
         )
     
     # Update fields
-    if strategy_data.name is not None:
-        strategy.name = strategy_data.name
-    if strategy_data.description is not None:
-        strategy.description = strategy_data.description
-    if strategy_data.entry_rules is not None:
-        strategy.entry_rules = strategy_data.entry_rules
-    if strategy_data.exit_rules is not None:
-        strategy.exit_rules = strategy_data.exit_rules
-    if strategy_data.risk_rules is not None:
-        strategy.risk_rules = strategy_data.risk_rules
-    if strategy_data.color is not None:
-        strategy.color = strategy_data.color
+    update_data = strategy_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if hasattr(strategy, field):
+            setattr(strategy, field, value)
     
+    db.add(strategy)
+    await db.flush()
     await db.commit()
     await db.refresh(strategy)
     

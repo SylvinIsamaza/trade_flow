@@ -38,6 +38,7 @@ class Account(Base, TimestampMixin):
     base_currency: Mapped[str] = mapped_column(String(10), default="USD", nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)  # Display name
     account_type: Mapped[str] = mapped_column(String(10), default=AccountType.DEMO.value, nullable=False)
+    starting_balance: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     
     # Relationships - keep simple to avoid circular import issues
     user: Mapped["User"] = relationship(back_populates="accounts")

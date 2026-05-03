@@ -62,6 +62,7 @@ async def create_account(
         name=account_data.name,
         base_currency=account_data.base_currency,
         account_type=account_data.account_type,
+        starting_balance=account_data.starting_balance,
     )
     
     db.add(new_account)
@@ -125,6 +126,8 @@ async def update_account(
         account.base_currency = account_data.base_currency
     if account_data.account_type is not None:
         account.account_type = account_data.account_type
+    if account_data.starting_balance is not None:
+        account.starting_balance = account_data.starting_balance
     
     await db.commit()
     await db.refresh(account)

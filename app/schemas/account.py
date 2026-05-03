@@ -9,6 +9,7 @@ class AccountBase(BaseModel):
     name: str
     base_currency: str = "USD"
     account_type: str = "DEMO"
+    starting_balance: Optional[float] = None
 
 
 class AccountCreate(AccountBase):
@@ -22,6 +23,7 @@ class AccountUpdate(BaseModel):
     name: Optional[str] = None
     base_currency: Optional[str] = None
     account_type: Optional[str] = None
+    starting_balance: Optional[float] = None
 
 
 class AccountResponse(AccountBase):

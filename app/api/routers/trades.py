@@ -189,11 +189,16 @@ async def update_trade(
             detail="Trade not found"
         )
     
-    # Update fields
+    # Update fields from the request
     update_data = trade_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(trade, field, value)
     
+    for field, value in update_data.items():
+        if hasattr(trade, field):
+            setattr(trade, field, value)
+    
+    # Mark the object as modified to ensure changes are tracked
+    db.add(trade)
+    await db.flush()  # Flush changes to DB
     await db.commit()
     await db.refresh(trade)
     

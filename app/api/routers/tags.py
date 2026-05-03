@@ -121,6 +121,23 @@ async def create_tag(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Tag type must be one of: {', '.join(valid_types)}"
         )
+    
+    # Check if tag already exists with same name and type
+    existing_tag_result = await db.execute(
+        select(Tag).where(
+            and_(
+                Tag.account_id == tag_data.account_id,
+                Tag.name.ilike(tag_data.name),  # Case-insensitive comparison
+                Tag.type == tag_data.type.upper()
+            )
+        )
+    )
+    existing_tag = existing_tag_result.scalar_one_or_none()
+    
+    # If tag already exists, return it instead of creating duplicate
+    if existing_tag:
+        return existing_tag
+    
     tag_id=generate_tag_id(tag_data.account_id)
     
     new_tag = Tag(
