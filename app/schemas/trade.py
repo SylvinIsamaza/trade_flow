@@ -22,6 +22,60 @@ class TradeBase(BaseModel):
     status: Optional[str] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    
+    # PRE-TRADE LOG FIELDS
+    # Market Context
+    session: Optional[str] = None  # London, New York, Asian
+    higher_timeframe_bias: Optional[str] = None  # Bullish, Bearish, Ranging
+    trend_structure: Optional[str] = None  # HH/HL, LH/LL
+    key_levels: Optional[str] = None  # Support, resistance, liquidity zones
+    pre_trade_screenshot_url: Optional[str] = None
+    
+    # Setup Details
+    entry_model: Optional[str] = None  # SMC, breakout, pullback, scalp, reversal
+    reason_for_entry: Optional[str] = None
+    confirmation_used: Optional[str] = None
+    
+    # Risk Management
+    dollar_amount_risked: Optional[float] = None
+    percentage_risked: Optional[float] = None
+    
+    # Mental State
+    energy_level: Optional[int] = None  # 1-10 scale
+    emotions: Optional[str] = None
+    confidence_level: Optional[int] = None  # 1-10 scale
+    forcing_trades: Optional[bool] = None
+    sleep_quality: Optional[str] = None  # good, fair, poor
+    distractions: Optional[str] = None
+    
+    # POST-TRADE LOG FIELDS
+    # Trade Outcome
+    actual_rr_achieved: Optional[float] = None
+    pips_gained_lost: Optional[float] = None
+    
+    # Execution Review
+    followed_plan: Optional[bool] = None
+    entered_too_early: Optional[bool] = None
+    moved_sl: Optional[bool] = None
+    closed_early_from_fear: Optional[bool] = None
+    greed_affected_tp: Optional[bool] = None
+    
+    # Market Behavior
+    what_actually_happened: Optional[str] = None
+    setup_worked_as_expected: Optional[bool] = None
+    abnormal_volatility: Optional[bool] = None
+    news_event_involved: Optional[str] = None
+    
+    # Post-Trade Screenshot
+    post_trade_screenshot_url: Optional[str] = None
+    screenshot_annotations: Optional[str] = None
+
+    pre_trade_screenshot_url: Optional[str] = None
+    pre_trade_screenshot_annotations: Optional[str] = None
+    
+    # Lesson Learned
+    trade_commentary: Optional[str] = None
+    
     setups: Optional[List[str]] = None
     general_tags: Optional[List[str]] = None
     exit_tags: Optional[List[str]] = None
@@ -69,6 +123,57 @@ class TradeUpdate(BaseModel):
     status: Optional[str] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    
+    # PRE-TRADE LOG FIELDS
+    # Market Context
+    session: Optional[str] = None
+    higher_timeframe_bias: Optional[str] = None
+    trend_structure: Optional[str] = None
+    key_levels: Optional[str] = None
+    pre_trade_screenshot_url: Optional[str] = None
+    
+    # Setup Details
+    entry_model: Optional[str] = None
+    reason_for_entry: Optional[str] = None
+    confirmation_used: Optional[str] = None
+    
+    # Risk Management
+    dollar_amount_risked: Optional[float] = None
+    percentage_risked: Optional[float] = None
+    
+    # Mental State
+    energy_level: Optional[int] = None
+    emotions: Optional[str] = None
+    confidence_level: Optional[int] = None
+    forcing_trades: Optional[bool] = None
+    sleep_quality: Optional[str] = None
+    distractions: Optional[str] = None
+    
+    # POST-TRADE LOG FIELDS
+    # Trade Outcome
+    actual_rr_achieved: Optional[float] = None
+    pips_gained_lost: Optional[float] = None
+    
+    # Execution Review
+    followed_plan: Optional[bool] = None
+    entered_too_early: Optional[bool] = None
+    moved_sl: Optional[bool] = None
+    closed_early_from_fear: Optional[bool] = None
+    greed_affected_tp: Optional[bool] = None
+    
+    # Market Behavior
+    what_actually_happened: Optional[str] = None
+    setup_worked_as_expected: Optional[bool] = None
+    abnormal_volatility: Optional[bool] = None
+    news_event_involved: Optional[str] = None
+    
+    # Post-Trade Screenshot
+    post_trade_screenshot_url: Optional[str] = None
+    screenshot_annotations: Optional[str] = None
+    
+    # Lesson Learned
+    trade_commentary: Optional[str] = None
+    
     setups: Optional[List[str]] = None
     general_tags: Optional[List[str]] = None
     exit_tags: Optional[List[str]] = None

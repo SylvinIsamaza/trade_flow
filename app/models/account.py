@@ -79,6 +79,56 @@ class Trade(Base, TimestampMixin):
     stop_loss: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     take_profit: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     
+    # PRE-TRADE LOG FIELDS
+    # Market Context
+    session: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # London, New York, Asian
+    higher_timeframe_bias: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Bullish, Bearish, Ranging
+    trend_structure: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # HH/HL, LH/LL, etc.
+    key_levels: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Support, resistance, liquidity zones
+    pre_trade_screenshot_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Screenshot before entry
+    
+    # Setup Details
+    entry_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # SMC, breakout, pullback, scalp, reversal
+    reason_for_entry: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confirmation_used: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Risk Management (additional)
+    dollar_amount_risked: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
+    percentage_risked: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)  # e.g., 2.5 for 2.5%
+    
+    # Mental State
+    energy_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-10 scale
+    emotions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-10 scale
+    forcing_trades: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    sleep_quality: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # good, fair, poor
+    distractions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # POST-TRADE LOG FIELDS
+    # Trade Outcome
+    actual_rr_achieved: Mapped[Optional[float]] = mapped_column(Numeric(8, 2), nullable=True)
+    pips_gained_lost: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    
+    # Execution Review
+    followed_plan: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    entered_too_early: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    moved_sl: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    closed_early_from_fear: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    greed_affected_tp: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    
+    # Market Behavior
+    what_actually_happened: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    setup_worked_as_expected: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    abnormal_volatility: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    news_event_involved: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Post-Trade Screenshot
+    post_trade_screenshot_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    screenshot_annotations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Markings: Entry, Exit, Mistakes, etc.
+    
+    # Lesson Learned
+    trade_commentary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
     # Tags
     setups: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     general_tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
