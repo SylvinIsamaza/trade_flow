@@ -7,6 +7,7 @@ from app.api.routers import (
     comments, tags, strategies, notes, insights,
     notifications, sessions, import_trades
 )
+from app.api.routers.files import router as files_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -40,6 +41,7 @@ app.include_router(insights.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(import_trades.router, prefix="/api")
+app.include_router(files_router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 
 

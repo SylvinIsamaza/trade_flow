@@ -361,7 +361,7 @@ async def setup_2fa(current_user: User = Depends(get_current_user), db: AsyncSes
     totp = pyotp.TOTP(secret)
     qr_url = totp.provisioning_uri(
         name=current_user.email,
-        issuer_name="TradeFlow"
+        issuer_name="Execution Book"
     )
     
     # Store temporary secret (not enabled yet)

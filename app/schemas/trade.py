@@ -29,16 +29,18 @@ class TradeBase(BaseModel):
     higher_timeframe_bias: Optional[str] = None  # Bullish, Bearish, Ranging
     trend_structure: Optional[str] = None  # HH/HL, LH/LL
     key_levels: Optional[str] = None  # Support, resistance, liquidity zones
-    pre_trade_screenshot_url: Optional[str] = None
-    
+    pre_trade_screenshot_url: Optional[List[str]] = None
+
     # Setup Details
     entry_model: Optional[str] = None  # SMC, breakout, pullback, scalp, reversal
+    entry_checklist_items: Optional[List[str]] = None
     reason_for_entry: Optional[str] = None
     confirmation_used: Optional[str] = None
     
     # Risk Management
     dollar_amount_risked: Optional[float] = None
     percentage_risked: Optional[float] = None
+    risk_checklist_items: Optional[List[str]] = None
     
     # Mental State
     energy_level: Optional[int] = None  # 1-10 scale
@@ -67,11 +69,10 @@ class TradeBase(BaseModel):
     news_event_involved: Optional[str] = None
     
     # Post-Trade Screenshot
-    post_trade_screenshot_url: Optional[str] = None
+    post_trade_screenshot_url: Optional[List[str]] = None
     screenshot_annotations: Optional[str] = None
 
-    pre_trade_screenshot_url: Optional[str] = None
-    pre_trade_screenshot_annotations: Optional[str] = None
+    pre_trade_screenshot_annotation: Optional[str] = None
     
     # Lesson Learned
     trade_commentary: Optional[str] = None
@@ -97,6 +98,17 @@ class TradeBase(BaseModel):
         if isinstance(value, time):
             return value.strftime('%H:%M')
         return str(value)
+
+    @field_validator('pre_trade_screenshot_url', 'post_trade_screenshot_url', mode='before')
+    @classmethod
+    def normalize_screenshot_urls(cls, value: Optional[Union[str, List[str]]]) -> Optional[List[str]]:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [value]
+        return list(value)
 
 
 class TradeCreate(TradeBase):
@@ -130,16 +142,19 @@ class TradeUpdate(BaseModel):
     higher_timeframe_bias: Optional[str] = None
     trend_structure: Optional[str] = None
     key_levels: Optional[str] = None
-    pre_trade_screenshot_url: Optional[str] = None
+    pre_trade_screenshot_url: Optional[List[str]] = None
+    pre_trade_screenshot_annotation: Optional[str] = None
     
     # Setup Details
     entry_model: Optional[str] = None
+    entry_checklist_items: Optional[List[str]] = None
     reason_for_entry: Optional[str] = None
     confirmation_used: Optional[str] = None
     
     # Risk Management
     dollar_amount_risked: Optional[float] = None
     percentage_risked: Optional[float] = None
+    risk_checklist_items: Optional[List[str]] = None
     
     # Mental State
     energy_level: Optional[int] = None
@@ -168,7 +183,7 @@ class TradeUpdate(BaseModel):
     news_event_involved: Optional[str] = None
     
     # Post-Trade Screenshot
-    post_trade_screenshot_url: Optional[str] = None
+    post_trade_screenshot_url: Optional[List[str]] = None
     screenshot_annotations: Optional[str] = None
     
     # Lesson Learned
@@ -215,6 +230,17 @@ class TradeUpdate(BaseModel):
         if isinstance(value, time):
             return value.strftime('%H:%M')
         return str(value) if value else None
+
+    @field_validator('pre_trade_screenshot_url', 'post_trade_screenshot_url', mode='before')
+    @classmethod
+    def normalize_screenshot_urls(cls, value: Optional[Union[str, List[str]]]) -> Optional[List[str]]:
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [value]
+        return list(value)
 
 
 class TradeResponse(TradeBase):

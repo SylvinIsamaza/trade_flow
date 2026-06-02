@@ -34,6 +34,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-jose==3.5.0
 python-multipart==0.0.22
+minio==7.1.0
 rsa==4.9.1
 six==1.17.0
 soupsieve==2.8.3

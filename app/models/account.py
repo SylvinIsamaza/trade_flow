@@ -1,11 +1,32 @@
 import enum
+import json
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Time, Numeric, Index, ARRAY
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 from app.utils.id_generator import generate_account_id, generate_trade_id
+
+
+class JSONEncodedList(TypeDecorator):
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return json.dumps(value)
+        return json.dumps([value])
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            return [value] if value else []
 
 
 class AccountType(enum.Enum):
@@ -85,16 +106,19 @@ class Trade(Base, TimestampMixin):
     higher_timeframe_bias: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Bullish, Bearish, Ranging
     trend_structure: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # HH/HL, LH/LL, etc.
     key_levels: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Support, resistance, liquidity zones
-    pre_trade_screenshot_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Screenshot before entry
+    pre_trade_screenshot_url: Mapped[Optional[List[str]]] = mapped_column(JSONEncodedList, nullable=True)  # Screenshot before entry
+    pre_trade_screenshot_annotation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Setup Details
     entry_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # SMC, breakout, pullback, scalp, reversal
+    entry_checklist_items: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     reason_for_entry: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     confirmation_used: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Risk Management (additional)
     dollar_amount_risked: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     percentage_risked: Mapped[Optional[float]] = mapped_column(Numeric(6, 2), nullable=True)  # e.g., 2.5 for 2.5%
+    risk_checklist_items: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     
     # Mental State
     energy_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-10 scale
@@ -123,7 +147,7 @@ class Trade(Base, TimestampMixin):
     news_event_involved: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Post-Trade Screenshot
-    post_trade_screenshot_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    post_trade_screenshot_url: Mapped[Optional[List[str]]] = mapped_column(JSONEncodedList, nullable=True)
     screenshot_annotations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Markings: Entry, Exit, Mistakes, etc.
     
     # Lesson Learned

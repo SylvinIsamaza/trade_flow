@@ -100,32 +100,10 @@ async def create_trade(
             detail="Account not found"
         )
     
+    trade_payload = trade_data.model_dump()
     new_trade = Trade(
         id=generate_trade_id(trade_data.account_id, trade_data.executed_at),
-        account_id=trade_data.account_id,
-        symbol=trade_data.symbol,
-        side=trade_data.side,
-        entry_price=trade_data.entry_price,
-        exit_price=trade_data.exit_price,
-        close_price=trade_data.close_price,
-        quantity=trade_data.quantity,
-        pnl=trade_data.pnl,
-        commission=trade_data.commission,
-        swap=trade_data.swap,
-        duration=trade_data.duration,
-        trade_type=trade_data.trade_type,
-        execution_type=trade_data.execution_type,
-        status=trade_data.status,
-        stop_loss=trade_data.stop_loss,
-        take_profit=trade_data.take_profit,
-        setups=trade_data.setups,
-        general_tags=trade_data.general_tags,
-        exit_tags=trade_data.exit_tags,
-        process_tags=trade_data.process_tags,
-        notes=trade_data.notes,
-        executed_at=trade_data.executed_at,
-        date=trade_data.date,
-        time=trade_data.time,
+        **trade_payload,
     )
     
     db.add(new_trade)

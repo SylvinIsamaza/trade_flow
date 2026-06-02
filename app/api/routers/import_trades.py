@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
 import json
 import random
@@ -13,7 +13,12 @@ from app.models.account import Account
 from app.models.account import Trade
 from app.models.supporting import Tag
 from app.schemas.trade import TradeResponse
-from app.utils.import_parser import parse_trade_file, convert_to_trade_format
+from app.utils.import_parser import (
+    parse_trade_file,
+    parse_tabular_trade_file,
+    convert_to_trade_format,
+    convert_mapped_row_to_trade_format,
+)
 from app.utils.id_generator import generate_trade_id, generate_tag_id
 
 router = APIRouter(prefix="/import", tags=["Trade Import"])
@@ -22,6 +27,8 @@ router = APIRouter(prefix="/import", tags=["Trade Import"])
 @router.post("/trades", response_model=dict)
 async def import_trades(
     account_id: str = Form(...),
+    import_type: str = Form("metatrader"),
+    column_mapping: Optional[str] = Form(None),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -49,9 +56,28 @@ async def import_trades(
     # Read file content
     content = await file.read()
     
+    parsed_mapping: Optional[Dict[str, str]] = None
+    if column_mapping:
+        try:
+            parsed_mapping = json.loads(column_mapping)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid column mapping JSON"
+            )
+
     # Detect and parse file
     try:
-        positions = parse_trade_file(content, file.filename)
+        if import_type == "other":
+            if not parsed_mapping:
+                raise ValueError("Column mapping is required for Other imports")
+            table_data = parse_tabular_trade_file(content, file.filename)
+            positions = [
+                convert_mapped_row_to_trade_format(row, parsed_mapping, account_id)
+                for row in table_data["rows"]
+            ]
+        else:
+            positions = parse_trade_file(content, file.filename)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -115,7 +141,7 @@ async def import_trades(
     
     for idx, position in enumerate(positions):
         try:
-            trade_data = convert_to_trade_format(position, account_id)
+            trade_data = position if import_type == "other" else convert_to_trade_format(position, account_id)
             
             # Parse executed_at datetime
             executed_at_dt = datetime.fromisoformat(trade_data["executed_at"]) if trade_data.get("executed_at") else datetime.now()
@@ -181,6 +207,34 @@ async def import_trades(
                 date=trade_data["date"],
                 time=trade_data["time"],
                 close_time=trade_data["close_time"],
+                session=trade_data.get("session"),
+                higher_timeframe_bias=trade_data.get("higher_timeframe_bias"),
+                trend_structure=trade_data.get("trend_structure"),
+                key_levels=trade_data.get("key_levels"),
+                entry_model=trade_data.get("entry_model"),
+                reason_for_entry=trade_data.get("reason_for_entry"),
+                confirmation_used=trade_data.get("confirmation_used"),
+                dollar_amount_risked=trade_data.get("dollar_amount_risked"),
+                percentage_risked=trade_data.get("percentage_risked"),
+                energy_level=trade_data.get("energy_level"),
+                emotions=trade_data.get("emotions"),
+                confidence_level=trade_data.get("confidence_level"),
+                forcing_trades=trade_data.get("forcing_trades"),
+                sleep_quality=trade_data.get("sleep_quality"),
+                distractions=trade_data.get("distractions"),
+                actual_rr_achieved=trade_data.get("actual_rr_achieved"),
+                pips_gained_lost=trade_data.get("pips_gained_lost"),
+                followed_plan=trade_data.get("followed_plan"),
+                entered_too_early=trade_data.get("entered_too_early"),
+                moved_sl=trade_data.get("moved_sl"),
+                closed_early_from_fear=trade_data.get("closed_early_from_fear"),
+                greed_affected_tp=trade_data.get("greed_affected_tp"),
+                what_actually_happened=trade_data.get("what_actually_happened"),
+                setup_worked_as_expected=trade_data.get("setup_worked_as_expected"),
+                abnormal_volatility=trade_data.get("abnormal_volatility"),
+                news_event_involved=trade_data.get("news_event_involved"),
+                screenshot_annotations=trade_data.get("screenshot_annotations"),
+                trade_commentary=trade_data.get("trade_commentary"),
             )
             
             db.add(new_trade)
@@ -217,6 +271,8 @@ async def import_trades(
 @router.post("/trades/preview", response_model=dict)
 async def preview_import(
     account_id: str = Form(...),
+    import_type: str = Form("metatrader"),
+    column_mapping: Optional[str] = Form(None),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -246,9 +302,34 @@ async def preview_import(
     # Read file content
     content = await file.read()
     
+    parsed_mapping: Optional[Dict[str, str]] = None
+    if column_mapping:
+        try:
+            parsed_mapping = json.loads(column_mapping)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid column mapping JSON"
+            )
+
     # Detect and parse file
     try:
-        positions = parse_trade_file(content, file.filename)
+        if import_type == "other":
+            table_data = parse_tabular_trade_file(content, file.filename)
+            if not parsed_mapping:
+                return {
+                    "needs_mapping": True,
+                    "columns": table_data["columns"],
+                    "sample_rows": table_data["rows"][:5],
+                    "total_positions": len(table_data["rows"]),
+                    "preview": []
+                }
+            positions = [
+                convert_mapped_row_to_trade_format(row, parsed_mapping, account_id)
+                for row in table_data["rows"]
+            ]
+        else:
+            positions = parse_trade_file(content, file.filename)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -258,7 +339,7 @@ async def preview_import(
     # Convert first 10 for preview
     preview_trades = []
     for position in positions[:10]:
-        trade_data = convert_to_trade_format(position, account_id)
+        trade_data = position if import_type == "other" else convert_to_trade_format(position, account_id)
         preview_trades.append({
             "symbol": trade_data["symbol"],
             "side": trade_data["side"],
@@ -283,6 +364,7 @@ async def preview_import(
         })
     
     return {
+        "needs_mapping": False,
         "total_positions": len(positions),
         "preview": preview_trades
     }

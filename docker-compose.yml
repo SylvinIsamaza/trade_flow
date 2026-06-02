@@ -22,6 +22,26 @@ services:
     networks:
       - tradeflow_network
 
+  minio:
+    image: minio/minio:latest
+    container_name: tradeflow_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    networks:
+      - tradeflow_network
+
+volumes:
+  minio_data:
+    driver: local
+
 networks:
   tradeflow_network:
     driver: bridge

@@ -2,11 +2,12 @@
 MT5 Trade Import Parser
 Parses trades from HTML, XML, and Excel reports exported from MetaTrader 5
 """
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 import io
 import zipfile
 import re
+import csv
 
 # Optional imports - will raise error if not installed
 try:
@@ -220,10 +221,220 @@ def parse_trade_file(content: bytes, filename: str) -> List[Dict]:
         raise ValueError(f"Unsupported file format: {ext}")
 
 
+def parse_tabular_trade_file(content: bytes, filename: str) -> Dict[str, Any]:
+    """
+    Parse a generic CSV/Excel file into columns and row dictionaries.
+    Used by the "Other" import flow where users map source columns manually.
+    """
+    ext = filename.lower().split('.')[-1]
+
+    def json_safe(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if PANDAS_AVAILABLE:
+            try:
+                if pd.isna(value):
+                    return None
+                if hasattr(value, "isoformat"):
+                    return value.isoformat()
+            except Exception:
+                pass
+        if isinstance(value, (int, float, str, bool)):
+            return value
+        return str(value)
+
+    if ext in ["xlsx", "xls"]:
+        if not PANDAS_AVAILABLE:
+            raise ImportError("pandas is required for Excel parsing. Install with: pip install pandas openpyxl")
+        df = pd.read_excel(io.BytesIO(content))
+        df = df.where(pd.notna(df), None)
+        columns = [str(col).strip() for col in df.columns]
+        rows = [
+            {str(key).strip(): json_safe(value) for key, value in row.items()}
+            for row in df.to_dict(orient="records")
+        ]
+        return {"columns": columns, "rows": rows}
+
+    if ext == "csv":
+        text = content.decode("utf-8-sig", errors="replace")
+        sample = text[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample)
+        except csv.Error:
+            dialect = csv.excel
+        reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+        columns = [str(col).strip() for col in (reader.fieldnames or [])]
+        rows = [
+            {str(key).strip(): json_safe(value) for key, value in row.items()}
+            for row in reader
+        ]
+        return {"columns": columns, "rows": rows}
+
+    raise ValueError(f"Unsupported file format for custom import: {ext}")
+
+
 def _safe_parse_num(val) -> float:
     """Safely parse a numeric value from string, handling edge cases."""
     if val is None:
         return 0.0
+
+
+def _safe_parse_bool(val) -> Optional[bool]:
+    if val is None:
+        return None
+    val_str = str(val).strip().lower()
+    if val_str in ["true", "yes", "y", "1", "checked"]:
+        return True
+    if val_str in ["false", "no", "n", "0", "unchecked"]:
+        return False
+    return None
+
+
+def _safe_parse_datetime(val) -> Optional[datetime]:
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    if PANDAS_AVAILABLE:
+        try:
+            parsed = pd.to_datetime(val)
+            if not pd.isna(parsed):
+                return parsed.to_pydatetime()
+        except Exception:
+            pass
+    val_str = str(val).strip()
+    for fmt in [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%Y.%m.%d %H:%M:%S",
+        "%Y.%m.%d %H:%M",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+    ]:
+        try:
+            return datetime.strptime(val_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _split_list_value(val) -> List[str]:
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return [str(item).strip() for item in val if str(item).strip()]
+    return [
+        part.strip()
+        for part in re.split(r"[,;|]", str(val))
+        if part.strip()
+    ]
+
+
+def _mapped_value(row: Dict, column_mapping: Dict[str, str], field: str):
+    column = column_mapping.get(field)
+    if not column:
+        return None
+    return row.get(column)
+
+
+def convert_mapped_row_to_trade_format(row: Dict, column_mapping: Dict[str, str], account_id: str) -> Dict:
+    """
+    Convert a user-mapped generic row to our Trade model format.
+    Mapping format is { trade_field: source_column_name }.
+    """
+    symbol = str(_mapped_value(row, column_mapping, "symbol") or "").strip()
+    if not symbol:
+        raise ValueError("Missing required symbol")
+
+    side_raw = str(_mapped_value(row, column_mapping, "side") or "").strip().lower()
+    side = "SHORT" if side_raw in ["short", "sell", "s"] else "LONG"
+
+    executed_at = _safe_parse_datetime(_mapped_value(row, column_mapping, "executed_at"))
+    date_value = _safe_parse_datetime(_mapped_value(row, column_mapping, "date"))
+    time_value = str(_mapped_value(row, column_mapping, "time") or "").strip()
+    if not executed_at and date_value:
+        executed_at = date_value
+        if time_value:
+            time_dt = _safe_parse_datetime(f"{date_value.date().isoformat()} {time_value}")
+            if time_dt:
+                executed_at = time_dt
+    if not executed_at:
+        executed_at = datetime.now()
+
+    closed_at = _safe_parse_datetime(_mapped_value(row, column_mapping, "closed_at"))
+    close_time_value = str(_mapped_value(row, column_mapping, "close_time") or "").strip()
+    if not closed_at and close_time_value:
+        close_dt = _safe_parse_datetime(f"{executed_at.date().isoformat()} {close_time_value}")
+        if close_dt:
+            closed_at = close_dt
+
+    pnl = _safe_parse_num(_mapped_value(row, column_mapping, "pnl"))
+    mapped_status = str(_mapped_value(row, column_mapping, "status") or "").strip().upper()
+    status = mapped_status if mapped_status in ["WIN", "LOSS", "BE"] else "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BE"
+
+    return {
+        "account_id": account_id,
+        "symbol": symbol,
+        "side": side,
+        "entry_price": _safe_parse_num(_mapped_value(row, column_mapping, "entry_price")),
+        "exit_price": _safe_parse_num(_mapped_value(row, column_mapping, "exit_price")),
+        "close_price": _safe_parse_num(_mapped_value(row, column_mapping, "close_price")) or _safe_parse_num(_mapped_value(row, column_mapping, "exit_price")),
+        "quantity": _safe_parse_num(_mapped_value(row, column_mapping, "quantity")),
+        "pnl": pnl,
+        "commission": _safe_parse_num(_mapped_value(row, column_mapping, "commission")),
+        "swap": _safe_parse_num(_mapped_value(row, column_mapping, "swap")),
+        "duration": str(_mapped_value(row, column_mapping, "duration") or ""),
+        "trade_type": str(_mapped_value(row, column_mapping, "trade_type") or "Day Trade"),
+        "execution_type": str(_mapped_value(row, column_mapping, "execution_type") or "Market"),
+        "status": status,
+        "stop_loss": _safe_parse_num(_mapped_value(row, column_mapping, "stop_loss")),
+        "take_profit": _safe_parse_num(_mapped_value(row, column_mapping, "take_profit")),
+        "session": _mapped_value(row, column_mapping, "session"),
+        "higher_timeframe_bias": _mapped_value(row, column_mapping, "higher_timeframe_bias"),
+        "trend_structure": _mapped_value(row, column_mapping, "trend_structure"),
+        "key_levels": _mapped_value(row, column_mapping, "key_levels"),
+        "entry_model": _mapped_value(row, column_mapping, "entry_model"),
+        "reason_for_entry": _mapped_value(row, column_mapping, "reason_for_entry"),
+        "confirmation_used": _mapped_value(row, column_mapping, "confirmation_used"),
+        "dollar_amount_risked": _safe_parse_num(_mapped_value(row, column_mapping, "dollar_amount_risked")),
+        "percentage_risked": _safe_parse_num(_mapped_value(row, column_mapping, "percentage_risked")),
+        "energy_level": int(_safe_parse_num(_mapped_value(row, column_mapping, "energy_level"))) if _mapped_value(row, column_mapping, "energy_level") is not None else None,
+        "emotions": _mapped_value(row, column_mapping, "emotions"),
+        "confidence_level": int(_safe_parse_num(_mapped_value(row, column_mapping, "confidence_level"))) if _mapped_value(row, column_mapping, "confidence_level") is not None else None,
+        "forcing_trades": _safe_parse_bool(_mapped_value(row, column_mapping, "forcing_trades")),
+        "sleep_quality": _mapped_value(row, column_mapping, "sleep_quality"),
+        "distractions": _mapped_value(row, column_mapping, "distractions"),
+        "actual_rr_achieved": _safe_parse_num(_mapped_value(row, column_mapping, "actual_rr_achieved")),
+        "pips_gained_lost": _safe_parse_num(_mapped_value(row, column_mapping, "pips_gained_lost")),
+        "followed_plan": _safe_parse_bool(_mapped_value(row, column_mapping, "followed_plan")),
+        "entered_too_early": _safe_parse_bool(_mapped_value(row, column_mapping, "entered_too_early")),
+        "moved_sl": _safe_parse_bool(_mapped_value(row, column_mapping, "moved_sl")),
+        "closed_early_from_fear": _safe_parse_bool(_mapped_value(row, column_mapping, "closed_early_from_fear")),
+        "greed_affected_tp": _safe_parse_bool(_mapped_value(row, column_mapping, "greed_affected_tp")),
+        "what_actually_happened": _mapped_value(row, column_mapping, "what_actually_happened"),
+        "setup_worked_as_expected": _safe_parse_bool(_mapped_value(row, column_mapping, "setup_worked_as_expected")),
+        "abnormal_volatility": _safe_parse_bool(_mapped_value(row, column_mapping, "abnormal_volatility")),
+        "news_event_involved": _mapped_value(row, column_mapping, "news_event_involved"),
+        "screenshot_annotations": _mapped_value(row, column_mapping, "screenshot_annotations"),
+        "trade_commentary": _mapped_value(row, column_mapping, "trade_commentary"),
+        "setups": _split_list_value(_mapped_value(row, column_mapping, "setups")),
+        "general_tags": _split_list_value(_mapped_value(row, column_mapping, "general_tags")),
+        "exit_tags": _split_list_value(_mapped_value(row, column_mapping, "exit_tags")),
+        "process_tags": _split_list_value(_mapped_value(row, column_mapping, "process_tags")),
+        "notes": _mapped_value(row, column_mapping, "notes"),
+        "executed_at": executed_at.isoformat(),
+        "closed_at": closed_at.isoformat() if closed_at else None,
+        "date": executed_at.date().isoformat(),
+        "time": executed_at.strftime("%H:%M"),
+        "close_time": closed_at.strftime("%H:%M") if closed_at else close_time_value or None,
+    }
     # Convert to string and strip
     val_str = str(val).strip()
     if not val_str or val_str == "-" or val_str == "":
