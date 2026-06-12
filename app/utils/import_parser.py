@@ -92,9 +92,14 @@ def parse_positions_from_mt5_html(content: bytes) -> List[Dict]:
 
         if len(values) >= 3:
             # Check if first value looks like a date (our data rows start with dates like "2026.02.10")
-            first_val = values[0] if values else ""
-            if not first_val or not first_val[0].isdigit():
+            first_val = values[0] if values and values[0] is not None else ""
+            if not first_val or not str(first_val)[0].isdigit():
                 continue
+
+            # Ensure we have at least 13 columns expected by MT5 positions table
+            if len(values) < 13:
+                values += [None] * (13 - len(values))
+
             position_data = {
                 "open_time": values[0],
                 "position": values[1],
@@ -279,6 +284,41 @@ def _safe_parse_num(val) -> float:
     """Safely parse a numeric value from string, handling edge cases."""
     if val is None:
         return 0.0
+    # Numeric types
+    if isinstance(val, (int, float)):
+        try:
+            return float(val)
+        except Exception:
+            return 0.0
+    # pandas NA handling
+    if PANDAS_AVAILABLE:
+        try:
+            if pd.isna(val):
+                return 0.0
+        except Exception:
+            pass
+
+    s = str(val).strip()
+    if not s or s == "-":
+        return 0.0
+
+    # Handle numbers in parentheses as negatives e.g. (1,234.56)
+    negative = False
+    if s.startswith("(") and s.endswith(")"):
+        negative = True
+        s = s[1:-1].strip()
+
+    # Remove currency symbols and non-number characters except dot, comma and minus
+    s = re.sub(r"[^0-9.,\-]", "", s)
+    # Remove thousands separators
+    s = s.replace(",", "")
+    if not s:
+        return 0.0
+    try:
+        value = float(s)
+        return -value if negative else value
+    except ValueError:
+        return 0.0
 
 
 def _safe_parse_bool(val) -> Optional[bool]:
@@ -435,15 +475,6 @@ def convert_mapped_row_to_trade_format(row: Dict, column_mapping: Dict[str, str]
         "time": executed_at.strftime("%H:%M"),
         "close_time": closed_at.strftime("%H:%M") if closed_at else close_time_value or None,
     }
-    # Convert to string and strip
-    val_str = str(val).strip()
-    if not val_str or val_str == "-" or val_str == "":
-        return 0.0
-    # Remove commas and try to convert
-    try:
-        return float(val_str.replace(",", ""))
-    except (ValueError, AttributeError):
-        return 0.0
 
 
 def convert_to_trade_format(position: Dict, account_id: str) -> Dict:

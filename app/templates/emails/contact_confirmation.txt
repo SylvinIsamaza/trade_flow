@@ -1,0 +1,13 @@
+Thank You for Contacting TradeFlow
+
+Hi {{ data.name }},
+
+Thank you for reaching out to us. We've received your message about "{{ data.subject }}" and will review it shortly.
+
+Our team typically responds within 24 hours during business days.
+
+Best regards,
+The TradeFlow Team
+
+---
+© 2024 TradeFlow. All rights reserved.

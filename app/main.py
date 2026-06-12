@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.api.routers import (
     auth, users, accounts, trades, analytics, reports,
     comments, tags, strategies, notes, insights,
-    notifications, sessions, import_trades
+    notifications, sessions, import_trades, contact
 )
 from app.api.routers.files import router as files_router
 
@@ -43,6 +43,7 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(import_trades.router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(contact.router)
 
 
 @app.get("/")

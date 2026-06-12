@@ -1,0 +1,10 @@
+Contact Form Submission
+
+From: {{ data.name }} <{{ data.email }}>
+Subject: {{ data.subject }}
+
+Message:
+{{ data.message }}
+
+---
+This email was sent from the TradeFlow contact form.

@@ -104,6 +104,26 @@ class EmailService:
                     f"Your trades have been imported successfully.",
                     f"Imported: {data.get('count', 0)} trades",
                 ]
+            elif template_name == 'contact':
+                lines = [
+                    "NEW CONTACT FORM SUBMISSION",
+                    "",
+                    f"From: {data.get('name', 'Unknown')} <{data.get('email', 'unknown@example.com')}>",
+                    f"Subject: {data.get('subject', 'No subject')}",
+                    "",
+                    "Message:",
+                    data.get('message', ''),
+                ]
+            elif template_name == 'contact_confirmation':
+                lines = [
+                    f"Thank you for contacting us, {data.get('name', 'User')}!",
+                    "",
+                    f"We've received your message about '{data.get('subject', 'your inquiry')}'.",
+                    "Our team will review it and get back to you soon.",
+                    "",
+                    "Best regards,",
+                    "The TradeFlow Team",
+                ]
             else:
                 # Generic fallback
                 lines = [f"Hello {data.get('name', 'User')},"]
