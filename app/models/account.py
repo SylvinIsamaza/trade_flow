@@ -82,6 +82,7 @@ class Trade(Base, TimestampMixin):
     # Trade details
     symbol: Mapped[str] = mapped_column(String(50), nullable=False)
     side: Mapped[str] = mapped_column(String(10), nullable=False)  # LONG or SHORT
+    ticket: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entry_price: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     exit_price: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)
     close_price: Mapped[Optional[float]] = mapped_column(Numeric(18, 8), nullable=True)

@@ -20,6 +20,7 @@ class TradeBase(BaseModel):
     trade_type: Optional[str] = None
     execution_type: Optional[str] = None
     status: Optional[str] = None
+    ticket: Optional[str] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     
@@ -198,6 +199,7 @@ class TradeUpdate(BaseModel):
     closed_at: Optional[datetime] = None
     date: Optional[Union[str, datetime]] = None
     time: Optional[str] = None
+    ticket: Optional[str] = None
     close_time: Optional[str] = None
     
     @field_validator('date', 'executed_at', 'closed_at', mode='before')

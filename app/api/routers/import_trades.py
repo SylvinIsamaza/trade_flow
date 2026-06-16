@@ -184,6 +184,7 @@ async def import_trades(
                 account_id=trade_data["account_id"],
                 symbol=trade_data["symbol"],
                 side=trade_data["side"],
+                ticket=trade_data.get("ticket"),
                 entry_price=trade_data["entry_price"],
                 exit_price=trade_data["exit_price"],
                 close_price=trade_data["close_price"],
@@ -343,6 +344,7 @@ async def preview_import(
         preview_trades.append({
             "symbol": trade_data["symbol"],
             "side": trade_data["side"],
+            "ticket": trade_data.get("ticket"),
             "entry_price": trade_data["entry_price"],
             "exit_price": trade_data["exit_price"],
             "pnl": trade_data["pnl"],

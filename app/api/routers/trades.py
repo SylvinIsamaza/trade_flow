@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from app.core.database import get_db
 from app.api.routers.auth import get_current_user
@@ -39,11 +39,11 @@ async def get_trades(
         base_query = base_query.where(Trade.account_id == account_id)
     if start_date:
         # Convert date to datetime for comparison (start of day)
-        start_datetime = datetime.combine(start_date, datetime.min.time())
+        start_datetime = datetime.combine(start_date, time.min)
         base_query = base_query.where(Trade.executed_at >= start_datetime)
     if end_date:
-        # Convert date to datetime for comparison (end of day)
-        end_datetime = datetime.combine(end_date, datetime.max.time())
+        # Convert date to datetime for comparison (end of day, 23:59:59.999999)
+        end_datetime = datetime.combine(end_date, time.max)
         base_query = base_query.where(Trade.executed_at <= end_datetime)
     if side:
         base_query = base_query.where(Trade.side == side)

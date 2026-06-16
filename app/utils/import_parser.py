@@ -8,6 +8,7 @@ import io
 import zipfile
 import re
 import csv
+import uuid
 
 # Optional imports - will raise error if not installed
 try:
@@ -419,10 +420,14 @@ def convert_mapped_row_to_trade_format(row: Dict, column_mapping: Dict[str, str]
     mapped_status = str(_mapped_value(row, column_mapping, "status") or "").strip().upper()
     status = mapped_status if mapped_status in ["WIN", "LOSS", "BE"] else "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BE"
 
+    ticket_value = _mapped_value(row, column_mapping, "ticket")
+    ticket = str(ticket_value).strip() if ticket_value is not None else None
+
     return {
         "account_id": account_id,
         "symbol": symbol,
         "side": side,
+        "ticket": ticket,
         "entry_price": _safe_parse_num(_mapped_value(row, column_mapping, "entry_price")),
         "exit_price": _safe_parse_num(_mapped_value(row, column_mapping, "exit_price")),
         "close_price": _safe_parse_num(_mapped_value(row, column_mapping, "close_price")) or _safe_parse_num(_mapped_value(row, column_mapping, "exit_price")),
@@ -527,10 +532,17 @@ def convert_to_trade_format(position: Dict, account_id: str) -> Dict:
     entry_time_str = executed_at.strftime("%H:%M") if executed_at else "00:00"
     close_time_str = close_time.strftime("%H:%M") if close_time else "00:00"
     
+    ticket_value = position.get("position") or position.get("ticket")
+    if ticket_value is not None:
+        ticket = str(ticket_value).strip()
+    else:
+        ticket = f"MT5_{executed_at.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
     return {
         "account_id": account_id,
         "symbol": str(position.get("symbol", "")).strip(),
         "side": "SHORT" if trade_type_raw == "sell" else "LONG",
+        "ticket": ticket,
         "entry_price": _safe_parse_num(position.get("open_price")),
         "exit_price": _safe_parse_num(position.get("close_price")),
         "close_price": _safe_parse_num(position.get("close_price")),
