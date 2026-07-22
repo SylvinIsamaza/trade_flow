@@ -329,6 +329,7 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
             "worst_loss": 0.0,
             "average_trade_duration": "0m",
             "total_commission": 0.0,
+            "total_swap": 0.0,
             "avg_win_streak": 0.0,
             "max_win_streak": 0,
             "avg_loss_streak": 0.0,
@@ -341,8 +342,10 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
     losses = [t for t in trades if t.pnl and float(t.pnl) < 0]
     
     total_trades = len(trades)
-    total_profit = float(sum(float(t.pnl) for t in trades if t.pnl))
+    gross_pnl = float(sum(float(t.pnl) for t in trades if t.pnl))
     total_commission = float(sum(float(t.commission) for t in trades if t.commission))
+    total_swap = float(sum(float(t.swap) for t in trades if t.swap))
+    total_profit = gross_pnl - total_commission - total_swap
     
     winners = len(wins)
     losers = len(losses)
@@ -383,6 +386,7 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
         "worst_loss": worst_loss,
         "average_trade_duration": avg_duration,
         "total_commission": total_commission,
+        "total_swap": total_swap,
         "avg_win_streak": float(streak_data["avg_win_streak"]),
         "max_win_streak": int(streak_data["max_win_streak"]),
         "avg_loss_streak": float(streak_data["avg_loss_streak"]),
