@@ -345,7 +345,7 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
     gross_pnl = float(sum(float(t.pnl) for t in trades if t.pnl))
     total_commission = float(sum(float(t.commission) for t in trades if t.commission))
     total_swap = float(sum(float(t.swap) for t in trades if t.swap))
-    total_profit = gross_pnl - total_commission - total_swap
+    total_profit = gross_pnl - total_commission + total_swap
     
     winners = len(wins)
     losers = len(losses)
