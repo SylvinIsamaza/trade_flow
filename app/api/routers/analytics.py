@@ -345,7 +345,7 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
     gross_pnl = float(sum(float(t.pnl) for t in trades if t.pnl))
     total_commission = float(sum(float(t.commission) for t in trades if t.commission))
     total_swap = float(sum(float(t.swap) for t in trades if t.swap))
-    total_profit = gross_pnl - total_commission + total_swap
+    total_profit = gross_pnl - abs(total_commission) + total_swap
     
     winners = len(wins)
     losers = len(losses)
@@ -353,7 +353,7 @@ def calculate_stats_from_trades(trades: List[Any]) -> Dict[str, Any]:
     
     total_wins = sum(float(t.pnl) for t in wins) if wins else 0.0
     total_losses = abs(sum(float(t.pnl) for t in losses)) if losses else 0.0
-    profit_factor = float(total_losses / total_wins) if total_wins > 0 else 0.0
+    profit_factor = float(total_wins / total_losses) if total_losses > 0 else 0.0
     
     average_win = float(total_wins / winners) if winners > 0 else 0.0
     average_loss = float(total_losses / losers) if losers > 0 else 0.0
